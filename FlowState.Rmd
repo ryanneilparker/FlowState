@@ -1,0 +1,244 @@
+---
+title: "FlowState Report"
+output: 
+  flexdashboard::flex_dashboard:
+    orientation: columns
+    vertical_layout: fill
+---
+
+```{r setup, include=FALSE, message=FALSE, echo=FALSE}
+library(flexdashboard)
+library(tidyverse)
+library(plotly)
+# Importing published ledger data
+ledger = read.csv("https://docs.google.com/spreadsheets/d/e/2PACX-1vRntCy1xwfHoiPlB1cCtokloUcuoJuRJgXP0dL9arQPorUe1kYs1cRms-k4x4S_CmJhPnFBMXYD5AWb/pub?output=csv")
+
+# Importing published capital data
+capital = read.csv("https://docs.google.com/spreadsheets/d/e/2PACX-1vQreG9l9BQ3OwqNUXieLVD2MhhELChxrymJ9UkHQfyZHJM6h22VXlWYo0_CxPX2ncw9dh_GYlaYRY0m/pub?output=csv")
+```
+
+# Financial
+
+## Column 1 Charts
+
+### Sales
+
+```{r}
+# Filtering for sales
+sales = filter(ledger, Transaction == "Sales") %>%
+  select(Timestamp, Value, Quantity, System) %>%
+  mutate(Date = as.Date(Timestamp, "%m/%d/%y"))
+
+# Displaying bar graph of sales
+ggplotly(
+  ggplot(sales, aes(x = Date, y = Value, fill = System)) +
+    geom_col(position = position_dodge(), show.legend = FALSE) +
+    scale_fill_manual(values = c("BlueViolet", "LimeGreen")) +
+    theme_minimal()
+)
+```
+
+### Price/g
+```{r}
+# Filtering for prices per gram
+prices = mutate(sales, Price = Value / Quantity) %>%
+  select(Price, Date, System)
+
+# Displaying line graph of prices per gram
+ggplotly(
+  ggplot(prices, aes(x = Date, y = Price, color = System)) +
+    geom_line(show.legend = FALSE) +
+    geom_point(show.legend = FALSE) +
+    scale_color_manual(values = c("BlueViolet", "LimeGreen")) +
+    theme_minimal()
+)
+```
+
+## Column 2 Sales
+
+### Balance
+
+```{r}
+# Calculating ledger balance
+balance = sum(ledger$Value[which(ledger$Transaction == "Sales")]) - sum(ledger$Value[which(ledger$Transaction == "Purchase")])
+
+# Displaying ledger balance
+valueBox(balance, caption = "Balance", icon = "fa-balance-scale", color = ifelse(balance > 0, "SteelBlue", "Tomato"))
+```
+
+### Total Sales
+
+```{r}
+# Filtering for total sales
+total.sales = filter(ledger, Transaction == "Sales") %>%
+  select(Value) %>%
+  summarize(sum(Value)) %>%
+  as.numeric()
+
+# Displaying total sales
+valueBox(total.sales, caption = "Total Sales", icon = "fa-dollar-sign", color = "LightSlateGrey")
+```
+
+### Magic Sales
+
+```{r}
+# Filtering for magic sales
+magic.sales = filter(ledger, Transaction == "Sales") %>%
+  filter(System == "Magic") %>%
+  select(Value) %>%
+  summarize(sum(Value)) %>%
+  as.numeric()
+
+# Displaying magic sales
+valueBox(magic.sales, caption = "Magic Sales", icon = "fa-dollar-sign", color = "BlueViolet")
+```
+
+### Average Price Magic
+
+```{r}
+# Calculating magic average price per gram
+magic.price = filter(sales, System == "Magic") %>%
+  transmute(Price = Value / Quantity) %>%
+  summarize(mean(Price)) %>%
+  as.numeric()
+
+# Displaying magic average price per gram
+valueBox(magic.price, caption = "Average Price Per Gram", icon = "fa-line-chart", color = "BlueViolet")
+```
+
+### Uncanni Sales
+
+```{r}
+# Filtering for uncanni sales
+uncanni.sales = filter(ledger, Transaction == "Sales") %>%
+  filter(System == "Uncanni") %>%
+  select(Value) %>%
+  summarize(sum(Value)) %>%
+  as.numeric()
+
+# Displaying uncanni sales
+valueBox(uncanni.sales, caption = "Uncanni Sales", icon = "fa-dollar-sign", color = "LimeGreen")
+```
+
+### Average Price Uncanni
+
+```{r}
+# Calculating uncanni average price per gram
+uncanni.price = filter(sales, System == "Uncanni") %>%
+  transmute(Price = Value / Quantity) %>%
+  summarize(mean(Price)) %>%
+  as.numeric()
+
+# Displaying uncanni average price per gram
+valueBox(uncanni.price, caption = "Average Price Per Gram", icon = "fa-line-chart", color = "LimeGreen")
+```
+
+## Column 3 Capital
+
+### Cole Capital Repayment
+
+```{r}
+# Filtering for cole investment
+cole.inv = filter(capital, Partner == "Cole") %>%
+  filter(Transaction == "Investment") %>%
+  select(Amount) %>%
+  summarize(sum(Amount)) %>%
+  as.numeric()
+
+# Filtering for cole repayment
+cole.rep = filter(capital, Partner == "Cole") %>%
+  filter(Transaction == "Repayment") %>%
+  select(Amount) %>%
+  summarize(sum(Amount)) %>%
+  as.numeric()
+
+# Displaying cole repayment gauge
+gauge(cole.rep, 0, cole.inv,
+      sectors = gaugeSectors(success = c(0.67*cole.inv, cole.inv),
+                             warning = c(0.34*cole.inv, 0.66*cole.inv),
+                             danger = c(0, 0.33*cole.inv),
+                             colors = c("LimeGreen", "Coral", "Tomato")))
+```
+
+### Zac Capital Repayment
+
+```{r}
+# Filtering for zac investment
+zac.inv = filter(capital, Partner == "Zac") %>%
+  filter(Transaction == "Investment") %>%
+  select(Amount) %>%
+  summarize(sum(Amount)) %>%
+  as.numeric()
+
+# Filtering for zac repayment
+zac.rep = filter(capital, Partner == "Zac") %>%
+  filter(Transaction == "Repayment") %>%
+  select(Amount) %>%
+  summarize(sum(Amount)) %>%
+  as.numeric()
+
+# Displaying zac repayment gauge
+gauge(zac.rep, 0, zac.inv,
+      sectors = gaugeSectors(success = c(0.67*zac.inv, zac.inv),
+                             warning = c(0.34*zac.inv, 0.66*zac.inv),
+                             danger = c(0, 0.33*zac.inv),
+                             colors = c("LimeGreen", "Coral", "Tomato")))
+```
+
+### Mike Capital Repayment
+
+```{r}
+# Filtering for mike investment
+mike.inv = filter(capital, Partner == "Mike") %>%
+  filter(Transaction == "Investment") %>%
+  select(Amount) %>%
+  summarize(sum(Amount)) %>%
+  as.numeric()
+
+# Filtering for mike repayment
+mike.rep = filter(capital, Partner == "Mike") %>%
+  filter(Transaction == "Repayment") %>%
+  select(Amount) %>%
+  summarize(sum(Amount)) %>%
+  as.numeric()
+
+# Displaying mike repayment gauge
+gauge(mike.rep, 0, mike.inv,
+      sectors = gaugeSectors(success = c(0.67*mike.inv, mike.inv),
+                             warning = c(0.34*mike.inv, 0.66*mike.inv),
+                             danger = c(0, 0.33*mike.inv),
+                             colors = c("LimeGreen", "Coral", "Tomato")))
+```
+
+### Ryan Capital Repaymet
+
+```{r}
+# Filtering for ryan investment
+ryan.inv.magic = filter(capital, Partner == "Ryan") %>%
+  filter(Transaction == "Investment") %>%
+  select(Amount) %>%
+  summarize(sum(Amount)) %>%
+  as.numeric()
+
+ryan.inv.uncanni = filter(ledger, System == "Uncanni") %>%
+  filter(Transaction == "Purchase") %>%
+  select(Value) %>%
+  summarize(sum(Value)) %>%
+  as.numeric()
+
+ryan.inv = ryan.inv.magic + ryan.inv.uncanni
+
+# Filtering for ryan repayment
+ryan.rep = filter(capital, Partner == "Ryan") %>%
+  filter(Transaction == "Repayment") %>%
+  select(Amount) %>%
+  summarize(sum(Amount)) %>%
+  as.numeric()
+
+# Displaying ryan repayment gauge
+gauge(ryan.rep, 0, ryan.inv,
+      sectors = gaugeSectors(success = c(0.67*ryan.inv, ryan.inv),
+                             warning = c(0.34*ryan.inv, 0.66*ryan.inv),
+                             danger = c(0, 0.33*ryan.inv),
+                             colors = c("LimeGreen", "Coral", "Tomato")))
+```
