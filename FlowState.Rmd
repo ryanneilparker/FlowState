@@ -15,6 +15,9 @@ ledger = read.csv("https://docs.google.com/spreadsheets/d/e/2PACX-1vRntCy1xwfHoi
 
 # Importing published capital data
 capital = read.csv("https://docs.google.com/spreadsheets/d/e/2PACX-1vQreG9l9BQ3OwqNUXieLVD2MhhELChxrymJ9UkHQfyZHJM6h22VXlWYo0_CxPX2ncw9dh_GYlaYRY0m/pub?output=csv")
+
+# Importing published magic operation data
+magic.operation = read.csv("https://docs.google.com/spreadsheets/d/e/2PACX-1vQSRMFF0TaPpLi9ruP1bBkZEeWVveMxzRhgvjrh3OuYe5CnrmMD3DCHOZM8cEPwhGsb4KLS_q1DPrSA/pub?output=csv")
 ```
 
 # Financial
@@ -27,7 +30,7 @@ capital = read.csv("https://docs.google.com/spreadsheets/d/e/2PACX-1vQreG9l9BQ3O
 # Filtering for sales
 sales = filter(ledger, Transaction == "Sales") %>%
   select(Timestamp, Value, Quantity, System) %>%
-  mutate(Date = as.Date(Timestamp, "%m/%d/%y"))
+  mutate(Date = parse_date(as.character(Timestamp), "%m/%d/%Y %H:%M:%S"), .keep = "unused")
 
 # Displaying bar graph of sales
 ggplotly(
@@ -39,6 +42,7 @@ ggplotly(
 ```
 
 ### Price/g
+
 ```{r}
 # Filtering for prices per gram
 prices = mutate(sales, Price = Value / Quantity) %>%
@@ -242,3 +246,164 @@ gauge(ryan.rep, 0, ryan.inv,
                              danger = c(0, 0.33*ryan.inv),
                              colors = c("LimeGreen", "Coral", "Tomato")))
 ```
+
+# Operations
+
+## Column 1 Charts
+
+### Yields
+
+```{r}
+# Filtering for yield
+yield = select(magic.operation, Timestamp, Yield) %>%
+  mutate(Date = parse_date(as.character(Timestamp), "%m/%d/%Y %H:%M:%S"), .keep = "unused") %>%
+  group_by(Date) %>%
+  summarize(Yield = sum(Yield))
+
+# Displaying bar graph of yield
+ggplotly(
+  ggplot(yield, aes(x = Date, y = Yield)) +
+    geom_col(fill = "BlueViolet") +
+    theme_minimal()
+)
+```
+
+### Contaminations
+
+```{r}
+# Filtering for contaminations
+contams = select(magic.operation, Timestamp, Operation, Contaminates, Batch, Contaminations, Batch.1, Contaminated) %>%
+  mutate(Date = as.Date(Timestamp, "%m/%d/%y"), .keep = "unused") %>%
+  unite(Contams, Contaminates, Contaminations, Contaminated, na.rm = TRUE)
+
+# Displaying line graph of contaminations
+ggplotly(
+  ggplot(contams, aes(x = Date, y = Contams, col = Operation)) +
+    geom_line(show.legend = FALSE) +
+    geom_point(show.legend = FALSE) +
+    scale_color_manual(values = c("DarkCyan", "DarkGrey", "DarkMagenta")) +
+    theme_minimal()
+)
+```
+
+## Column 2 Stats
+
+### Stock
+
+```{r}
+# Filtering for total yield
+total.yield = select(magic.operation, Yield) %>%
+  summarise(sum(Yield, na.rm = TRUE)) %>%
+  as.numeric()
+
+# Filtering for quantity sold
+total.sold = filter(ledger, Transaction == "Sales") %>%
+  select(Quantity) %>%
+  summarize(sum(Quantity, na.rm = TRUE)) %>%
+  as.numeric()
+
+# Calculating stock
+stock = total.yield - total.sold
+
+# Displaying current stock
+valueBox(stock, caption = "Stock (g)", icon = "fa-briefcase", color = ifelse(stock > 0, "SteelBlue", "Tomato"))
+```
+
+### Average Weekly Yield
+
+```{r}
+# Filtering for weekly yield
+weekly.yield = select(magic.operation, Timestamp, Yield) %>%
+  mutate(Timestamp = parse_date(as.character(Timestamp), "%m/%d/%Y %H:%M:%S"), .keep = "unused") %>%
+  mutate(Week = format(as.Date(Timestamp), "%W"), .keep = "unused") %>%
+  group_by(Week) %>%
+  summarize(sum(Yield, na.rm = TRUE))
+
+# Calculating average weekly yield
+average.weekly.yield = mean(weekly.yield[,2])
+
+# Displaying average weekly yield
+valueBox(average.weekly.yield, caption = "Average Weekly Yield (g)", icon = "fa-line-chart", color = "BlueViolet")
+```
+
+### Average Yield per Batch
+
+```{r}
+
+```
+
+### Number of Dishes
+
+```{r}
+# Filtering for total dishes made
+dishes.made = select(magic.operation, Copies) %>%
+  summarize(sum(Copies, na.rm = TRUE)) %>%
+  as.numeric()
+
+# Filtering for total dishes used
+dishes.used = select(magic.operation, Dishes) %>%
+  summarize(sum(Dishes, na.rm = TRUE)) %>%
+  as.numeric()
+
+# Filtering for total dishes contaminated
+dishes.contaminated = select(magic.operation, Contaminates) %>%
+  summarize(sum(Contaminates, na.rm = TRUE)) %>%
+  as.numeric()
+
+# Calculating available dishes
+dishes.available = dishes.made - dishes.used - dishes.contaminated
+
+# Displaying available dishes
+valueBox(dishes.available, caption = "Dishes Available", icon = "fa-circle-o", color = "DarkCyan")
+```
+
+### Number of Jars
+
+```{r}
+# Filtering for total jars made
+jars.made = select(magic.operation, Jars) %>%
+  summarize(sum(Jars, na.rm = TRUE)) %>%
+  as.numeric()
+
+# Filtering for total jars used
+jars.used = select(magic.operation, Spawn) %>%
+  summarize(sum(Spawn, na.rm = TRUE)) %>%
+  as.numeric()
+
+# Filtering for total jars contaminated
+jars.contaminated = select(magic.operation, Contaminations) %>%
+  summarize(sum(Contaminations)) %>%
+  as.numeric()
+
+# Calculating available jars
+jars.available = jars.made - jars.used - jars.contaminated
+
+# Displaying available jars
+valueBox(jars.available, caption = "Jars in Incubation", icon = "fa-beer", color = "DarkGrey")
+```
+
+### Number of Tubs
+
+```{r}
+# Filtering for tubs spawned
+tubs.spawned = select(magic.operation, Spawn) %>%
+  filter(Spawn > 0) %>%
+  as.data.frame() %>%
+  nrow %>%
+  as.numeric()
+
+# Filtering for tubs harvested
+tubs.harvested = select(magic.operation, Yield) %>%
+  filter(Yield > 0) %>%
+  as.data.frame() %>%
+  nrow() %>%
+  as.numeric()
+
+# Calculating active tubs
+tubs.active = tubs.spawned - tubs.harvested
+
+# Displaying active tubs
+valueBox(tubs.active, caption = "Tubs Active", icon = "fa-battery-empty", color = "DarkMagenta")
+```
+
+## Column 3 Targets
